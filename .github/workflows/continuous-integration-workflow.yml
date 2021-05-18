@@ -3,16 +3,6 @@ name: CI
 on:
   push:
     branches-ignore:
-      - '1.*'
-      - '2.*'
-      - '3.*'
-      - '4.*'
-      - '5.0.x'
-      - '5.1.x'
-      - '5.2.x'
-      - '5.3.x'
-      - '5.4.x'
-      - 'gh-pages'
   schedule:
     - cron: '0 10 * * *' # Once per day at 10am UTC
   workflow_dispatch: # Manual trigger
