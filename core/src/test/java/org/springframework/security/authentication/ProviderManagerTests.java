@@ -33,11 +33,7 @@ import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.*;
 
 /**
  * Tests {@link ProviderManager}.
@@ -175,6 +171,42 @@ public class ProviderManagerTests {
 				.asList(createProviderWhichThrows(new BadCredentialsException("")), createProviderWhichReturns(null)));
 		assertThatExceptionOfType(BadCredentialsException.class)
 				.isThrownBy(() -> mgr.authenticate(mock(Authentication.class)));
+	}
+
+	/**
+	 * This test verifies that multiple AuthenticationEvents are published in case of exceptions
+	 * in the provider manager chain (one event per ProviderManager).
+	 *
+	 * Whether this is a bug must still be investigated.
+	 */
+	@Test
+	public void multipleAuthenticationExceptionsInProviderChainShouldPublishMultipleEvents() {
+		AuthenticationEventPublisher publisher = mock(AuthenticationEventPublisher.class);
+
+		Authentication authReq = mock(Authentication.class);
+
+		ProviderManager parentMgr = makeProviderManager();
+		parentMgr.setAuthenticationEventPublisher(publisher);
+
+		ProviderManager mgr = new ProviderManager(Arrays
+				.asList(createProviderWhichThrows(new BadCredentialsException(""))), parentMgr);
+		mgr.setAuthenticationEventPublisher(publisher);
+
+		// Provider will not throw ProviderNotFoundException, but BadCredentialsException as expected
+		assertThatExceptionOfType(BadCredentialsException.class)
+				.isThrownBy(() -> mgr.authenticate(authReq));
+
+		//
+		// verify that the event with BadCredentialsException is thrown (AuthenticationFailureBadCredentialsEvent)
+		verify(publisher, atMostOnce()).publishAuthenticationFailure(any(BadCredentialsException.class), eq(authReq));
+		// ATTENTION: should this event with ProviderNotFoundEvent be published (AuthenticationFailureProviderNotFoundEvent)?
+		// or is this a bug described in #10206?
+		verify(publisher, atMostOnce()).publishAuthenticationFailure(any(ProviderNotFoundException.class), eq(authReq));
+
+		// so lets verify that 2 events are published..
+		verify(publisher, times(2)).publishAuthenticationFailure(any(AuthenticationException.class), eq(authReq));
+		// .. or should it be the following? (.. and test be renamed to '..ShouldOnlyPublishOneEvent')
+		// verify(publisher, atMostOnce()).publishAuthenticationFailure(any(AuthenticationException.class), eq(authReq));
 	}
 
 	// SEC-546
